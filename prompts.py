@@ -76,24 +76,26 @@ def get_continuation_task(project_dir: Path) -> str:
     return template.format(project_dir=project_dir)
 
 
-def copy_spec_to_project(project_dir: Path) -> None:
+def copy_spec_to_project(project_dir: Path, spec_path: Path | None = None) -> None:
     """
     Copy the app spec file into the project directory for the agent to read.
 
     Args:
         project_dir: Target project directory
+        spec_path: Optional explicit path to spec file. If None, uses
+                   the default prompts/app_spec.txt location.
 
     Raises:
         FileNotFoundError: If source spec file doesn't exist
         IOError: If copy operation fails
     """
-    spec_source: Path = PROMPTS_DIR / "app_spec.txt"
+    spec_source: Path = spec_path if spec_path is not None else PROMPTS_DIR / "app_spec.txt"
     spec_dest: Path = project_dir / "app_spec.txt"
 
     if not spec_source.exists():
         raise FileNotFoundError(
-            f"App spec template not found: {spec_source}\n"
-            f"This indicates an incomplete installation."
+            f"App spec not found: {spec_source}\n"
+            f"Check the spec path or ensure prompts/app_spec.txt exists."
         )
 
     if not spec_dest.exists():

@@ -18,11 +18,17 @@ Usage:
 """
 
 import argparse
+import asyncio
+import fcntl
 import json
+import os
+import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -35,7 +41,30 @@ from pydantic import BaseModel, Field
 HARNESS_DIR: Path = Path(__file__).parent
 QUEUE_DIR: Path = HARNESS_DIR / "data"
 QUEUE_FILE: Path = QUEUE_DIR / "queue.json"
+QUEUE_LOCK: Path = QUEUE_DIR / "queue.lock"
+RUNNER_PID_FILE: Path = QUEUE_DIR / "runner.pid"
 APP_SPEC_PATH: Path = HARNESS_DIR / "prompts" / "app_spec.txt"
+
+# Graceful shutdown timeout before SIGKILL
+SHUTDOWN_TIMEOUT_SECONDS: int = 15
+
+
+@contextmanager
+def queue_lock():
+    """Advisory exclusive lock for queue.json access.
+
+    MUST be used by ALL code paths that read or write queue.json:
+    cmd_add, cmd_start, cmd_status. Uses fcntl.flock which auto-releases
+    on process crash (fd close).
+    """
+    QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+    fd = open(QUEUE_LOCK, "w")
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        fd.close()
 
 
 # --- Models ---
@@ -85,11 +114,28 @@ def load_queue() -> QueueState:
 
 
 def save_queue(state: QueueState) -> None:
-    """Save queue state to disk."""
+    """Save queue state to disk atomically.
+
+    Writes to a temp file, fsyncs, then renames. The rename is atomic
+    on Linux for same-filesystem operations, protecting against
+    crash-during-write producing truncated JSON.
+    """
     QUEUE_DIR.mkdir(parents=True, exist_ok=True)
-    QUEUE_FILE.write_text(
-        json.dumps(state.model_dump(mode="json"), indent=2) + "\n"
-    )
+    data = json.dumps(state.model_dump(mode="json"), indent=2) + "\n"
+    fd_num, tmp_path = tempfile.mkstemp(dir=QUEUE_DIR, suffix=".tmp")
+    try:
+        with os.fdopen(fd_num, "w") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.rename(tmp_path, QUEUE_FILE)
+    except Exception:
+        # Clean up temp file on failure
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 # --- Helpers ---
@@ -105,7 +151,16 @@ def _get_processable_jobs(state: QueueState) -> list[QueueJob]:
 
 
 def _build_command(job: QueueJob) -> list[str]:
-    """Build the subprocess command list for autonomous_agent_demo.py."""
+    """Build the subprocess command list for autonomous_agent_demo.py.
+
+    Passes the spec path directly via --spec-path, eliminating the need
+    for the global prompts/app_spec.txt swap mechanism. This is required
+    for Level 2 concurrent builds where multiple jobs run simultaneously.
+    """
+    spec_source = Path(job.spec_path)
+    if not spec_source.is_absolute():
+        spec_source = HARNESS_DIR / spec_source
+
     cmd = [
         sys.executable,
         str(HARNESS_DIR / "autonomous_agent_demo.py"),
@@ -115,6 +170,8 @@ def _build_command(job: QueueJob) -> list[str]:
         job.model,
         "--max-iterations",
         str(job.max_iterations),
+        "--spec-path",
+        str(spec_source.resolve()),
     ]
     if job.parallel:
         cmd.append("--parallel")
@@ -126,8 +183,8 @@ def _run_job(job: QueueJob, dry_run: bool = False) -> None:
     """
     Execute a single queue job.
 
-    Swaps the app spec into prompts/app_spec.txt before launch,
-    restores the original afterward.
+    Each job's spec file is passed via --spec-path to autonomous_agent_demo.py.
+    No global file swap is needed -- concurrent jobs use their own spec files.
     """
     spec_source = Path(job.spec_path)
     if not spec_source.is_absolute():
@@ -149,18 +206,7 @@ def _run_job(job: QueueJob, dry_run: bool = False) -> None:
         print(f"  [dry-run] Project dir: {job.project_dir}")
         return
 
-    # Spec swap: backup → copy job spec → run → restore
-    backup_path = APP_SPEC_PATH.with_suffix(".txt.bak")
-    spec_swapped = False
-
     try:
-        # Only swap if the job spec differs from the default location
-        if spec_source.resolve() != APP_SPEC_PATH.resolve():
-            if APP_SPEC_PATH.exists():
-                shutil.copy2(APP_SPEC_PATH, backup_path)
-            shutil.copy2(spec_source, APP_SPEC_PATH)
-            spec_swapped = True
-
         job.status = JobStatus.running
         job.started_at = datetime.now(timezone.utc).isoformat()
 
@@ -197,13 +243,305 @@ def _run_job(job: QueueJob, dry_run: bool = False) -> None:
         job.status = JobStatus.failed
         job.error = str(e)
         job.completed_at = datetime.now(timezone.utc).isoformat()
+
+
+# --- Process Registry ---
+
+
+class ProcessRegistry:
+    """Tracks active child processes for graceful shutdown.
+
+    Each child is spawned with os.setsid so it heads its own process group.
+    On shutdown, we SIGTERM the entire group, then SIGKILL after timeout.
+    """
+
+    def __init__(self) -> None:
+        self._children: dict[str, asyncio.subprocess.Process] = {}
+
+    def register(self, job_id: str, proc: asyncio.subprocess.Process) -> None:
+        self._children[job_id] = proc
+
+    def unregister(self, job_id: str) -> None:
+        self._children.pop(job_id, None)
+
+    @property
+    def active_count(self) -> int:
+        return len(self._children)
+
+    async def terminate_all(self) -> None:
+        """Send SIGTERM to all child process groups, SIGKILL after timeout."""
+        if not self._children:
+            return
+
+        # Phase 1: SIGTERM to each child's process group
+        for job_id, proc in self._children.items():
+            if proc.returncode is None:
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                    print(f"  [shutdown] Sent SIGTERM to job '{job_id}' (PGID {pgid})")
+                except (ProcessLookupError, PermissionError):
+                    pass
+
+        # Phase 2: Wait up to SHUTDOWN_TIMEOUT_SECONDS, then SIGKILL stragglers
+        deadline = time.monotonic() + SHUTDOWN_TIMEOUT_SECONDS
+        for job_id, proc in list(self._children.items()):
+            remaining = max(0.1, deadline - time.monotonic())
+            try:
+                await asyncio.wait_for(proc.wait(), timeout=remaining)
+            except asyncio.TimeoutError:
+                try:
+                    pgid = os.getpgid(proc.pid)
+                    os.killpg(pgid, signal.SIGKILL)
+                    print(f"  [shutdown] Sent SIGKILL to job '{job_id}' (PGID {pgid})")
+                except (ProcessLookupError, PermissionError):
+                    pass
+
+        self._children.clear()
+
+
+# --- Runner PID Lock ---
+
+
+def _acquire_runner_lock() -> int | None:
+    """Acquire exclusive runner lock via PID file.
+
+    Returns the lock fd on success, None if another runner is active.
+    Uses LOCK_NB (non-blocking) to fail fast.
+    """
+    QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+    fd = os.open(str(RUNNER_PID_FILE), os.O_WRONLY | os.O_CREAT, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        # Write our PID
+        os.ftruncate(fd, 0)
+        os.write(fd, str(os.getpid()).encode())
+        return fd
+    except BlockingIOError:
+        os.close(fd)
+        return None
+
+
+def _release_runner_lock(fd: int) -> None:
+    """Release runner lock and clean up PID file."""
+    try:
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+        RUNNER_PID_FILE.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+# --- Async Job Execution ---
+
+
+async def _run_job_async(
+    job: QueueJob,
+    registry: ProcessRegistry,
+    shutdown_event: asyncio.Event,
+) -> None:
+    """
+    Execute a single queue job asynchronously.
+
+    Uses asyncio.create_subprocess_exec for non-blocking execution.
+    Each child process gets its own process group (os.setsid) for
+    clean shutdown. Streams output with [job-id] prefix.
+    """
+    spec_source = Path(job.spec_path)
+    if not spec_source.is_absolute():
+        spec_source = HARNESS_DIR / spec_source
+
+    if not spec_source.exists():
+        job.status = JobStatus.failed
+        job.error = f"Spec file not found: {spec_source}"
+        return
+
+    job.project_dir = str(HARNESS_DIR / "generations" / job.id)
+    cmd = _build_command(job)
+
+    # Check for shutdown before starting
+    if shutdown_event.is_set():
+        return
+
+    try:
+        job.status = JobStatus.running
+        job.started_at = datetime.now(timezone.utc).isoformat()
+
+        print(f"\n{'=' * 70}")
+        print(f"  QUEUE: Starting job '{job.id}' (async)")
+        print(f"  Model: {job.model} | Parallel: {job.parallel} | Spec: {spec_source.name}")
+        print(f"{'=' * 70}\n")
+
+        start_time = time.monotonic()
+
+        # Spawn with its own process group for clean shutdown
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+            cwd=str(HARNESS_DIR),
+            preexec_fn=os.setsid,
+        )
+
+        registry.register(job.id, proc)
+
+        # Stream output with job prefix
+        assert proc.stdout is not None
+        while True:
+            # Use a timeout on readline so we can check shutdown_event
+            try:
+                line = await asyncio.wait_for(proc.stdout.readline(), timeout=2.0)
+            except asyncio.TimeoutError:
+                if shutdown_event.is_set():
+                    break
+                continue
+            if not line:
+                break
+            print(f"  [{job.id}] {line.decode().rstrip()}", flush=True)
+
+        await proc.wait()
+        registry.unregister(job.id)
+
+        elapsed = time.monotonic() - start_time
+        job.exit_code = proc.returncode
+        job.duration_seconds = round(elapsed, 1)
+        job.completed_at = datetime.now(timezone.utc).isoformat()
+
+        if proc.returncode == 0:
+            job.status = JobStatus.completed
+        elif proc.returncode in (130, -signal.SIGTERM):
+            job.status = JobStatus.interrupted
+        else:
+            job.status = JobStatus.failed
+            job.error = f"Process exited with code {proc.returncode}"
+
+    except asyncio.CancelledError:
+        job.status = JobStatus.interrupted
+        job.completed_at = datetime.now(timezone.utc).isoformat()
+        registry.unregister(job.id)
+    except Exception as e:
+        job.status = JobStatus.failed
+        job.error = str(e)
+        job.completed_at = datetime.now(timezone.utc).isoformat()
+        registry.unregister(job.id)
     finally:
-        # Restore original spec
-        if spec_swapped and backup_path.exists():
+        # Persist status immediately after each job completes
+        with queue_lock():
+            save_queue(load_queue())  # Reload to avoid overwriting concurrent changes
+            # Re-apply this job's status to the freshly loaded state
+            fresh_state = load_queue()
+            for j in fresh_state.jobs:
+                if j.id == job.id:
+                    j.status = job.status
+                    j.started_at = job.started_at
+                    j.completed_at = job.completed_at
+                    j.duration_seconds = job.duration_seconds
+                    j.exit_code = job.exit_code
+                    j.error = job.error
+                    j.project_dir = job.project_dir
+                    break
+            save_queue(fresh_state)
+
+
+async def cmd_start_async(concurrency: int, dry_run: bool = False) -> int:
+    """Process the queue with bounded concurrency.
+
+    Uses asyncio.Semaphore to limit concurrent builds. Each job runs
+    as an async task with its own subprocess.
+
+    Args:
+        concurrency: Maximum concurrent jobs.
+        dry_run: If True, print commands without executing.
+
+    Returns:
+        Exit code (0 success, 130 interrupted).
+    """
+    # Acquire runner lock (prevent duplicate instances)
+    lock_fd = _acquire_runner_lock()
+    if lock_fd is None:
+        try:
+            existing_pid = RUNNER_PID_FILE.read_text().strip()
+        except (FileNotFoundError, OSError):
+            existing_pid = "unknown"
+        print(f"Error: Another queue runner is already active (PID {existing_pid})")
+        return 1
+
+    try:
+        # Legacy cleanup
+        backup_path = APP_SPEC_PATH.with_suffix(".txt.bak")
+        if backup_path.exists():
+            print(f"[recovery] Found stale spec backup, restoring {APP_SPEC_PATH.name}")
             shutil.move(str(backup_path), str(APP_SPEC_PATH))
-        elif spec_swapped and not backup_path.exists():
-            # Original didn't exist; remove the swapped copy
-            APP_SPEC_PATH.unlink(missing_ok=True)
+
+        with queue_lock():
+            state = load_queue()
+            processable = _get_processable_jobs(state)
+
+        if not processable:
+            print("Queue is empty or all jobs are completed/failed.")
+            return 0
+
+        if dry_run:
+            for job in processable:
+                _run_job(job, dry_run=True)
+            return 0
+
+        print(f"Processing {len(processable)} job(s) with concurrency={concurrency}...\n")
+
+        registry = ProcessRegistry()
+        shutdown_event = asyncio.Event()
+        semaphore = asyncio.Semaphore(concurrency)
+
+        # Install signal handlers
+        loop = asyncio.get_running_loop()
+
+        def _handle_signal(sig: int) -> None:
+            sig_name = signal.Signals(sig).name
+            print(f"\n  [runner] Received {sig_name}, initiating graceful shutdown...")
+            shutdown_event.set()
+
+        for sig in (signal.SIGTERM, signal.SIGINT):
+            loop.add_signal_handler(sig, _handle_signal, sig)
+
+        async def _guarded_run(job: QueueJob) -> None:
+            """Run a job behind the semaphore gate."""
+            async with semaphore:
+                if shutdown_event.is_set():
+                    return
+                await _run_job_async(job, registry, shutdown_event)
+
+        # Launch all jobs as tasks (semaphore controls actual concurrency)
+        tasks = [asyncio.create_task(_guarded_run(job)) for job in processable]
+
+        # Wait for all tasks or shutdown
+        try:
+            await asyncio.gather(*tasks)
+        except asyncio.CancelledError:
+            pass
+
+        # If shutdown was requested, terminate remaining children
+        if shutdown_event.is_set():
+            print("  [runner] Shutting down active builds...")
+            await registry.terminate_all()
+
+        # Print summary
+        with queue_lock():
+            state = load_queue()
+
+        completed = sum(1 for j in state.jobs if j.status == JobStatus.completed)
+        failed = sum(1 for j in state.jobs if j.status == JobStatus.failed)
+        pending = sum(1 for j in state.jobs if j.status == JobStatus.pending)
+        inter = sum(1 for j in state.jobs if j.status == JobStatus.interrupted)
+
+        print(f"\n{'=' * 70}")
+        print(f"  QUEUE SUMMARY")
+        print(f"  Completed: {completed} | Failed: {failed} | Pending: {pending} | Interrupted: {inter}")
+        print(f"{'=' * 70}")
+
+        return 130 if shutdown_event.is_set() else 0
+
+    finally:
+        _release_runner_lock(lock_fd)
 
 
 # --- CLI Commands ---
@@ -219,26 +557,27 @@ def cmd_add(args: argparse.Namespace) -> int:
         print(f"Error: Spec file not found: {spec}")
         return 1
 
-    state = load_queue()
+    with queue_lock():
+        state = load_queue()
 
-    # Check for duplicate ID
-    existing_ids = {job.id for job in state.jobs}
-    if args.id in existing_ids:
-        print(f"Error: Job with id '{args.id}' already exists")
-        print("Use a different --id or remove the existing job from data/queue.json")
-        return 1
+        # Check for duplicate ID
+        existing_ids = {job.id for job in state.jobs}
+        if args.id in existing_ids:
+            print(f"Error: Job with id '{args.id}' already exists")
+            print("Use a different --id or remove the existing job from data/queue.json")
+            return 1
 
-    job = QueueJob(
-        id=args.id,
-        spec_path=args.spec_path,
-        model=args.model,
-        max_iterations=args.max_iterations,
-        parallel=args.parallel,
-        max_workers=args.max_workers,
-    )
+        job = QueueJob(
+            id=args.id,
+            spec_path=args.spec_path,
+            model=args.model,
+            max_iterations=args.max_iterations,
+            parallel=args.parallel,
+            max_workers=args.max_workers,
+        )
 
-    state.jobs.append(job)
-    save_queue(state)
+        state.jobs.append(job)
+        save_queue(state)
 
     print(f"Added job '{job.id}' to queue")
     print(f"  Spec: {args.spec_path}")
@@ -248,8 +587,15 @@ def cmd_add(args: argparse.Namespace) -> int:
 
 def cmd_start(args: argparse.Namespace) -> int:
     """Process the queue sequentially."""
-    state = load_queue()
-    processable = _get_processable_jobs(state)
+    # Legacy cleanup: if a .bak from the old spec swap mechanism exists, restore it.
+    backup_path = APP_SPEC_PATH.with_suffix(".txt.bak")
+    if backup_path.exists():
+        print(f"[recovery] Found stale spec backup from old swap mechanism, restoring {APP_SPEC_PATH.name}")
+        shutil.move(str(backup_path), str(APP_SPEC_PATH))
+
+    with queue_lock():
+        state = load_queue()
+        processable = _get_processable_jobs(state)
 
     if not processable:
         print("Queue is empty or all jobs are completed/failed.")
@@ -267,7 +613,8 @@ def cmd_start(args: argparse.Namespace) -> int:
             break
         finally:
             if not args.dry_run:
-                save_queue(state)
+                with queue_lock():
+                    save_queue(state)
 
     # Print summary
     if not args.dry_run:
@@ -286,7 +633,8 @@ def cmd_start(args: argparse.Namespace) -> int:
 
 def cmd_status(args: argparse.Namespace) -> int:
     """Display queue status."""
-    state = load_queue()
+    with queue_lock():
+        state = load_queue()
 
     if not state.jobs:
         if args.json:
@@ -402,6 +750,13 @@ Examples:
         default=False,
         help="Show what would run without executing",
     )
+    start_parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=1,
+        help="Maximum concurrent builds (default: 1 = sequential). "
+        "Values > 1 use async execution with bounded concurrency.",
+    )
 
     # --- status ---
     status_parser = subparsers.add_parser("status", help="Show queue status")
@@ -428,7 +783,13 @@ def main() -> int:
     if args.command == "add":
         return cmd_add(args)
     elif args.command == "start":
-        return cmd_start(args)
+        concurrency = getattr(args, "concurrency", 1)
+        if concurrency > 1:
+            return asyncio.run(
+                cmd_start_async(concurrency=concurrency, dry_run=args.dry_run)
+            )
+        else:
+            return cmd_start(args)
     elif args.command == "status":
         return cmd_status(args)
     else:

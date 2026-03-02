@@ -175,6 +175,7 @@ async def run_autonomous_agent(
     project_dir: Path,
     model: str,
     max_iterations: int | None = None,
+    spec_path: Path | None = None,
 ) -> None:
     """
     Run the autonomous agent loop.
@@ -183,6 +184,9 @@ async def run_autonomous_agent(
         project_dir: Directory for the project
         model: Claude model to use
         max_iterations: Maximum number of iterations (None for unlimited)
+        spec_path: Optional explicit path to spec file. When provided,
+                   uses this instead of the default prompts/app_spec.txt.
+                   Enables concurrent builds with different specs.
 
     Raises:
         ValueError: If max_iterations is not positive
@@ -218,7 +222,7 @@ async def run_autonomous_agent(
         print("=" * 70)
         print()
         # Copy the app spec into the project directory for the agent to read
-        copy_spec_to_project(project_dir)
+        copy_spec_to_project(project_dir, spec_path=spec_path)
     else:
         print("Continuing existing project (Linear initialized)")
         print_progress_summary(project_dir)

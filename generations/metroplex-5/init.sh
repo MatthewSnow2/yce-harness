@@ -1,30 +1,32 @@
 #!/bin/bash
 set -e
 
+# Get absolute path of script directory
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
 echo "Starting AI Agent Analytics Platform..."
 
 # Install backend dependencies
 echo "Setting up backend..."
-cd "$(dirname "$0")/backend"
-if [ ! -d ".venv" ]; then
-    uv venv
+cd "$SCRIPT_DIR/backend"
+if [ ! -d "venv" ]; then
+    python3 -m venv venv
 fi
-source .venv/bin/activate
-uv pip install -r requirements.txt
+venv/bin/python3 -m pip install -r requirements.txt
 
 # Start backend server in background
 echo "Starting backend server on port 8000..."
-uvicorn main:app --host 0.0.0.0 --port 8000 --reload &
+venv/bin/python3 main.py &
 BACKEND_PID=$!
 
 # Install frontend dependencies
 echo "Setting up frontend..."
-cd "$(dirname "$0")/frontend"
-bun install
+cd "$SCRIPT_DIR/frontend"
+npm install --include=dev
 
 # Start frontend dev server
 echo "Starting frontend on port 3000..."
-bun run dev &
+npm run dev &
 FRONTEND_PID=$!
 
 echo ""

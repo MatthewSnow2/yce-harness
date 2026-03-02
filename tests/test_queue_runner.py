@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from queue_runner import (
     HARNESS_DIR,
     JobStatus,
+    ProcessRegistry,
     QueueJob,
     QueueState,
     _build_command,
@@ -244,6 +245,49 @@ class TestBuildCommand:
         job = QueueJob(id="x", spec_path="s.txt")
         cmd = _build_command(job)
         assert "20" in cmd
+
+    def test_spec_path_always_present(self) -> None:
+        """--spec-path must appear in every command (replaces global spec swap)."""
+        job = QueueJob(id="x", spec_path="specs/my_spec.txt")
+        cmd = _build_command(job)
+        assert "--spec-path" in cmd
+        # The resolved path should follow --spec-path
+        idx = cmd.index("--spec-path")
+        spec_val = cmd[idx + 1]
+        assert "my_spec.txt" in spec_val
+
+    def test_spec_path_absolute_resolution(self) -> None:
+        """Relative spec_path should resolve to absolute in command."""
+        job = QueueJob(id="x", spec_path="data/specs/test.txt")
+        cmd = _build_command(job)
+        idx = cmd.index("--spec-path")
+        spec_val = cmd[idx + 1]
+        # Should be absolute
+        assert Path(spec_val).is_absolute()
+
+
+class TestProcessRegistry:
+    def test_register_and_count(self) -> None:
+        reg = ProcessRegistry()
+        assert reg.active_count == 0
+        # Use a mock-like object
+        from unittest.mock import MagicMock
+        mock_proc = MagicMock()
+        reg.register("job-1", mock_proc)
+        assert reg.active_count == 1
+
+    def test_unregister(self) -> None:
+        from unittest.mock import MagicMock
+        reg = ProcessRegistry()
+        mock_proc = MagicMock()
+        reg.register("job-1", mock_proc)
+        reg.unregister("job-1")
+        assert reg.active_count == 0
+
+    def test_unregister_missing_is_safe(self) -> None:
+        reg = ProcessRegistry()
+        reg.unregister("nonexistent")  # Should not raise
+        assert reg.active_count == 0
 
 
 # --- Duplicate ID detection ---

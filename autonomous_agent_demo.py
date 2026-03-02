@@ -129,6 +129,14 @@ Environment Variables:
         "Each worker uses ~400MB RAM. Ignored without --parallel.",
     )
 
+    parser.add_argument(
+        "--spec-path",
+        type=Path,
+        default=None,
+        help="Explicit path to app spec file. When set, uses this instead of "
+        "prompts/app_spec.txt. Enables concurrent builds with different specs.",
+    )
+
     return parser.parse_args()
 
 
@@ -177,6 +185,11 @@ def main() -> int:
     # Resolve model short name to full model ID
     model_id: str = AVAILABLE_MODELS[args.model]
 
+    # Resolve spec path if provided
+    spec_path: Path | None = args.spec_path
+    if spec_path is not None and not spec_path.is_absolute():
+        spec_path = Path.cwd() / spec_path
+
     # Run the agent (parallel or sequential mode)
     try:
         if args.parallel:
@@ -188,6 +201,7 @@ def main() -> int:
                     model=model_id,
                     max_workers=args.max_workers,
                     max_iterations=args.max_iterations,
+                    spec_path=spec_path,
                 )
             )
         else:
@@ -196,6 +210,7 @@ def main() -> int:
                     project_dir=project_dir,
                     model=model_id,
                     max_iterations=args.max_iterations,
+                    spec_path=spec_path,
                 )
             )
         return 0

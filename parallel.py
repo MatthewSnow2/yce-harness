@@ -99,6 +99,10 @@ def _build_worker_command(
     ]
 
 
+# Worker timeout: 2 hours. Prevents hung SDK sessions from blocking tiers.
+MAX_WORKER_SECONDS: int = 7200
+
+
 async def _spawn_worker(
     cmd: list[str],
     issue_id: str,
@@ -106,6 +110,9 @@ async def _spawn_worker(
 ) -> tuple[str, int]:
     """
     Spawn a worker subprocess and wait for it to complete.
+
+    Applies a MAX_WORKER_SECONDS timeout. If the worker exceeds it,
+    the process is killed and a non-zero return code is returned.
 
     Args:
         cmd: Full command list for the subprocess.
@@ -115,7 +122,8 @@ async def _spawn_worker(
     Returns:
         Tuple of (issue_id, returncode).
     """
-    print(f"  [coordinator] Spawning worker {worker_index} for {issue_id}")
+    prefix = f"[W{worker_index}:{issue_id}]"
+    print(f"  {prefix} Spawning worker")
 
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -124,21 +132,29 @@ async def _spawn_worker(
         cwd=str(Path(__file__).parent),  # Run from project harness dir
     )
 
-    # Stream output line by line
+    # Stream output line by line with worker prefix
     assert proc.stdout is not None
     while True:
         line = await proc.stdout.readline()
         if not line:
             break
-        print(line.decode().rstrip(), flush=True)
+        print(f"  {prefix} {line.decode().rstrip()}", flush=True)
 
-    await proc.wait()
+    # Wait with timeout
+    try:
+        await asyncio.wait_for(proc.wait(), timeout=MAX_WORKER_SECONDS)
+    except asyncio.TimeoutError:
+        print(f"  {prefix} TIMEOUT after {MAX_WORKER_SECONDS}s, killing worker")
+        proc.kill()
+        await proc.wait()
+        return issue_id, 124  # 124 = timeout exit code (GNU coreutils convention)
+
     returncode = proc.returncode or 0
 
     if returncode == 0:
-        print(f"  [coordinator] Worker {worker_index} ({issue_id}) completed successfully")
+        print(f"  {prefix} Completed successfully")
     else:
-        print(f"  [coordinator] Worker {worker_index} ({issue_id}) failed (exit code {returncode})")
+        print(f"  {prefix} Failed (exit code {returncode})")
 
     return issue_id, returncode
 
@@ -291,6 +307,7 @@ async def run_parallel_agent(
     model: str,
     max_workers: int = 2,
     max_iterations: int | None = None,
+    spec_path: Path | None = None,
 ) -> None:
     """
     Run the parallel execution coordinator.
@@ -306,6 +323,7 @@ async def run_parallel_agent(
         model: Full Claude model ID.
         max_workers: Maximum concurrent worker processes (1-3).
         max_iterations: Not used in parallel mode (reserved for future).
+        spec_path: Optional explicit path to spec file.
 
     Raises:
         ValueError: If max_workers is not 1-3 or project is not initialized.
@@ -334,6 +352,7 @@ async def run_parallel_agent(
             project_dir=project_dir,
             model=model,
             max_iterations=1,
+            spec_path=spec_path,
         )
 
         if not is_linear_initialized(project_dir):
