@@ -176,6 +176,19 @@ def create_agent_definitions() -> dict[str, AgentDefinition]:
 # Create definitions at import time (reads env vars)
 AGENT_DEFINITIONS: dict[str, AgentDefinition] = create_agent_definitions()
 
+# Merge YAML-loaded agents from Academy when LOAD_AGENTS_FROM_YAML=true
+if os.environ.get("LOAD_AGENTS_FROM_YAML", "").lower() in ("true", "1", "yes"):
+    try:
+        from agents.yaml_loader import load_all_agents_from_yaml
+
+        _yaml_agents = load_all_agents_from_yaml()
+        if _yaml_agents:
+            # YAML definitions override hardcoded ones for matching keys
+            AGENT_DEFINITIONS.update(_yaml_agents)
+    except Exception as _e:
+        import warnings
+        warnings.warn(f"Failed to load YAML agent definitions: {_e}")
+
 # Export individual agents for convenience
 LINEAR_AGENT = AGENT_DEFINITIONS["linear"]
 GITHUB_AGENT = AGENT_DEFINITIONS["github"]
