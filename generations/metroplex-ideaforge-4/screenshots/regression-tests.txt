@@ -1,0 +1,27 @@
+=== Regression Test Evidence ===
+
+Test 7: Feature 1 - Parse Command
+Command: venv/bin/python -m csuite parse --path ./sample_code
+Found 3 modules, 4 classes, 11 functions, 3 imports
+
+Test 8: Feature 2 - Diagram Command
+Command: venv/bin/python -m csuite diagram --path ./sample_code --output regression_test.mmd
+Mermaid diagram written to regression_test.mmd
+
+First line of generated diagram:
+classDiagram
+
+
+Test 9: CLI Help
+Command: venv/bin/python -m csuite --help
+Usage: python -m csuite [OPTIONS] COMMAND [ARGS]...
+
+  csuite - Codebase visualization and documentation tool.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  diagram  Generate a Mermaid class diagram from the codebase.
+  docs     Generate Markdown documentation from the codebase.
+  parse    Parse a Python codebase and display summary statistics.

@@ -45,7 +45,8 @@ def diagram(path: str, output: str):
         mermaid_content = generate_mermaid_diagram(modules)
         # Respect CSUITE_OUTPUT_DIR environment variable
         output_dir = os.getenv('CSUITE_OUTPUT_DIR', '.')
-        output_path = Path(output_dir) / output
+        # Sanitize output path to prevent path traversal
+        output_path = Path(output_dir) / Path(output).name
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(mermaid_content)
         click.echo(f"Mermaid diagram written to {output_path}")
@@ -65,10 +66,13 @@ def docs(path: str, output: str):
     modules = parser.parse()
 
     try:
-        markdown_content = generate_markdown_docs(modules)
+        # Extract base package name from path
+        base_package = Path(path).name
+        markdown_content = generate_markdown_docs(modules, base_package=base_package)
         # Respect CSUITE_OUTPUT_DIR environment variable
         output_dir = os.getenv('CSUITE_OUTPUT_DIR', '.')
-        output_path = Path(output_dir) / output
+        # Sanitize output path to prevent path traversal
+        output_path = Path(output_dir) / Path(output).name
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(markdown_content)
         click.echo(f"Markdown documentation written to {output_path}")

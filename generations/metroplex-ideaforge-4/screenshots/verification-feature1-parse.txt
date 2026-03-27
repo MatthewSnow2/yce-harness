@@ -1,0 +1,11 @@
+VERIFICATION TEST: Feature 1 - Parse Command
+==============================================
+Command: venv/bin/python -m csuite parse --path ./sample_code
+
+Output:
+Found 3 modules, 4 classes, 11 functions, 3 imports
+
+Expected:
+Found 3 modules, 4 classes, 11 functions, 3 imports
+
+Result: PASS - Output matches expected exactly

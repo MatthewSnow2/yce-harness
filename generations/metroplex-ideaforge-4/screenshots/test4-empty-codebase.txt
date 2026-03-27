@@ -1,0 +1,15 @@
+TEST 4: Empty Codebase Handling
+Command: ./venv/bin/python -m csuite diagram --path /tmp/csuite_empty_test --output empty.mmd
+Output: Mermaid diagram written to empty.mmd
+
+File contents:
+classDiagram
+    %% No classes found in codebase
+
+Verification:
+✓ Handles empty directory gracefully (no crash)
+✓ Creates valid Mermaid diagram file
+✓ Contains comment about no classes found
+✓ File structure is valid (starts with classDiagram)
+
+Status: PASS

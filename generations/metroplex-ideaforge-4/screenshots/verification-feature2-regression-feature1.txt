@@ -1,0 +1,71 @@
+QA VERIFICATION AND REGRESSION TEST REPORT
+==========================================
+Date: 2026-03-26
+Working Directory: /home/apexaipc/projects/yce-harness/generations/metroplex-ideaforge-4
+
+FEATURE 2 VERIFICATION TESTS (Mermaid Diagram Generation)
+=========================================================
+
+TEST 1: Generate Mermaid Diagram - PASS
+- Command executed successfully
+- File created: architecture.mmd (614 bytes)
+- Output message confirmed
+
+TEST 2: Verify Diagram Contents - PASS
+- Starts with 'classDiagram': YES
+- Contains class definitions: YES (BaseClass, SampleClass, AnotherClass, ChildClass)
+- Contains inheritance edges: YES (SampleClass --|> BaseClass, ChildClass --|> SampleClass)
+- Magic methods as public: YES (+__init__ format confirmed)
+- Namespace organization: YES (module_a, module_b)
+
+TEST 3: CSUITE_OUTPUT_DIR Support - PASS
+- Environment variable honored
+- File created in custom directory: /tmp/csuite_qa_test/test_diagram.mmd
+- Content is valid Mermaid diagram
+- Matches expected structure
+
+TEST 4: Empty Codebase Handling - PASS
+- No crash on empty directory
+- Creates valid diagram file
+- Contains appropriate comment: "%% No classes found in codebase"
+- Graceful degradation confirmed
+
+FEATURE 1 REGRESSION TESTS (Parse Command)
+==========================================
+
+TEST 5: Parse Command - PASS
+- Command: python -m csuite parse --path ./sample_code
+- Expected: "Found 3 modules, 4 classes, 11 functions, 3 imports"
+- Actual: "Found 3 modules, 4 classes, 11 functions, 3 imports"
+- No regression detected
+
+TEST 6: CLI Help - PASS
+- Help command works correctly
+- All three commands displayed: parse, diagram, docs
+- Proper formatting and descriptions
+- No regression detected
+
+OVERALL VERDICT
+===============
+verification: PASS
+regression_test: PASS
+
+tested_features:
+  - "Mermaid Diagram Generation (Test 1: Basic generation)" - PASS
+  - "Mermaid Diagram Generation (Test 2: Content verification)" - PASS
+  - "Mermaid Diagram Generation (Test 3: CSUITE_OUTPUT_DIR support)" - PASS
+  - "Mermaid Diagram Generation (Test 4: Empty codebase handling)" - PASS
+  - "Parse Command (Regression)" - PASS
+  - "CLI Help (Regression)" - PASS
+
+screenshots:
+  - /home/apexaipc/projects/yce-harness/generations/metroplex-ideaforge-4/screenshots/test1-diagram-generation.txt
+  - /home/apexaipc/projects/yce-harness/generations/metroplex-ideaforge-4/screenshots/test2-diagram-contents.txt
+  - /home/apexaipc/projects/yce-harness/generations/metroplex-ideaforge-4/screenshots/test3-output-dir-support.txt
+  - /home/apexaipc/projects/yce-harness/generations/metroplex-ideaforge-4/screenshots/test4-empty-codebase.txt
+  - /home/apexaipc/projects/yce-harness/generations/metroplex-ideaforge-4/screenshots/test5-parse-regression.txt
+  - /home/apexaipc/projects/yce-harness/generations/metroplex-ideaforge-4/screenshots/test6-help-regression.txt
+
+issues_found: none
+
+All tests passed successfully. Feature 2 (Mermaid Diagram Generation) is working as specified, and Feature 1 (Parse Command) shows no regressions.

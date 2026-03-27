@@ -1,0 +1,14 @@
+TEST 5: Regression - Parse Command Still Works
+Command: ./venv/bin/python -m csuite parse --path ./sample_code
+Output: Found 3 modules, 4 classes, 11 functions, 3 imports
+
+Expected: "Found 3 modules, 4 classes, 11 functions, 3 imports"
+Actual: Found 3 modules, 4 classes, 11 functions, 3 imports
+
+Verification:
+✓ Parse command executes without errors
+✓ Output matches expected format
+✓ Correct counts for modules, classes, functions, imports
+✓ No regression detected
+
+Status: PASS

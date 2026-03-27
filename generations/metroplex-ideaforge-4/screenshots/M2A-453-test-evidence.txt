@@ -1,0 +1,87 @@
+================================================================================
+M2A-453: Feature 3 - Markdown Documentation Generation
+TEST EVIDENCE - ALL TESTS PASSED
+================================================================================
+
+TEST 1: Generate Documentation
+-------------------------------
+Command: python -m csuite docs --path ./sample_code --output docs.md
+Result: SUCCESS ✓
+Output: Markdown documentation written to docs.md
+
+TEST 2: Verify Documentation Content
+------------------------------------
+File: docs.md (generated successfully)
+
+✓ Table of Contents present at the top
+✓ Links to each module section
+✓ Module headers format: ## Module: sample_code.module_a
+✓ Classes section with names in bold
+✓ Base classes shown with "extends:" notation
+✓ Method signatures with parameters and return types
+✓ Functions section with full signatures
+✓ Docstrings displayed for all symbols
+
+Sample output from docs.md:
+---
+# Table of Contents
+
+- [Module: sample_code](#module-samplecode)
+- [Module: sample_code.module_a](#module-samplecodemodulea)
+- [Module: sample_code.module_b](#module-samplecodemoduleb)
+
+## Module: sample_code.module_a
+
+Module A - Contains sample classes and functions.
+
+### Classes
+
+- **BaseClass** — A base class for demonstration.
+  - Methods:
+    - `__init__(self, name: str)`
+    - `greet(self) -> str` — Return a greeting.
+- **SampleClass** (extends: BaseClass) — A sample class that extends BaseClass.
+  - Methods:
+    - `__init__(self, name: str, value: int = 0)`
+    - `compute(self, x: int) -> int` — Compute a value.
+
+### Functions
+
+- **func_a(x: int) -> str** — Returns a string representation of x.
+- **helper_func(data: list) -> dict** — Transforms a list into a dictionary.
+---
+
+TEST 3: Verify Features 1 & 2 Still Work
+----------------------------------------
+Command: python -m csuite parse --path ./sample_code
+Result: SUCCESS ✓
+Output: Found 3 modules, 4 classes, 11 functions, 3 imports
+
+Command: python -m csuite diagram --path ./sample_code --output test.mmd
+Result: SUCCESS ✓
+Output: Mermaid diagram written to test.mmd
+
+TEST 4: CSUITE_OUTPUT_DIR Environment Variable
+----------------------------------------------
+Command: CSUITE_OUTPUT_DIR=/tmp/csuite_docs_test python -m csuite docs --path ./sample_code --output test_docs.md
+Result: SUCCESS ✓
+Output: Markdown documentation written to /tmp/csuite_docs_test/test_docs.md
+Verification: File created in specified directory
+
+IMPLEMENTATION SUMMARY
+---------------------
+Files Modified:
+- csuite/docs.py (fully implemented generate_markdown_docs function)
+- csuite/main.py (added base_package parameter to docs command)
+
+Key Features Implemented:
+1. Table of contents with anchor links
+2. Module sections with dotted notation (sample_code.module_a)
+3. Class documentation with base classes
+4. Method signatures with docstrings
+5. Function signatures with docstrings
+6. CSUITE_OUTPUT_DIR environment variable support
+7. Proper anchor generation for internal links
+
+All tests passed successfully!
+================================================================================

@@ -1,0 +1,21 @@
+VERIFICATION TEST: CLI Help
+============================
+Command: venv/bin/python -m csuite --help
+
+Output:
+Usage: python -m csuite [OPTIONS] COMMAND [ARGS]...
+
+  csuite - Codebase visualization and documentation tool.
+
+Options:
+  --help  Show this message and exit.
+
+Commands:
+  diagram  Generate a Mermaid class diagram from the codebase.
+  docs     Generate Markdown documentation from the codebase.
+  parse    Parse a Python codebase and display summary statistics.
+
+Expected:
+Shows parse, diagram, docs commands
+
+Result: PASS - All three commands (parse, diagram, docs) are present

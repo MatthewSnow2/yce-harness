@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>M2A-453 Test Results</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 10px;
+            padding: 40px;
+            max-width: 1000px;
+            margin: 0 auto;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #667eea;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #764ba2;
+            margin-top: 30px;
+        }
+        .test-result {
+            background: #f0f9ff;
+            border-left: 5px solid #10b981;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 5px;
+        }
+        .command {
+            background: #1e293b;
+            color: #4ade80;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            border-radius: 5px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        .success-badge {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .doc-preview {
+            background: #fafafa;
+            border: 1px solid #e5e7eb;
+            padding: 20px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            line-height: 1.6;
+            overflow-x: auto;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .checklist {
+            list-style: none;
+            padding: 0;
+        }
+        .checklist li {
+            padding: 10px;
+            margin: 5px 0;
+            background: #ecfdf5;
+            border-left: 4px solid #10b981;
+            border-radius: 3px;
+        }
+        .checklist li:before {
+            content: "✓ ";
+            color: #10b981;
+            font-weight: bold;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 M2A-453: Feature 3 - Markdown Documentation Generation</h1>
+        <div style="text-align: center; margin: 20px 0;">
+            <span class="success-badge">ALL TESTS PASSED</span>
+        </div>
+
+        <div class="test-result">
+            <h2>✅ Test 1: Generate Documentation</h2>
+            <div class="command">$ python -m csuite docs --path ./sample_code --output docs.md</div>
+            <p><strong>Result:</strong> Markdown documentation written to docs.md</p>
+        </div>
+
+        <div class="test-result">
+            <h2>✅ Test 2: Verify Documentation Format</h2>
+            <ul class="checklist">
+                <li>Table of Contents at the top</li>
+                <li>Links to each module section</li>
+                <li>Module headers: ## Module: sample_code.module_a</li>
+                <li>Classes section with names in bold</li>
+                <li>Base classes shown with "extends:" notation</li>
+                <li>Method signatures with parameters and return types</li>
+                <li>Functions section with full signatures</li>
+                <li>Docstrings displayed for all symbols</li>
+            </ul>
+        </div>
+
+        <div class="test-result">
+            <h2>✅ Test 3: Verify Other Features Still Work</h2>
+            <div class="command">$ python -m csuite parse --path ./sample_code</div>
+            <p><strong>Output:</strong> Found 3 modules, 4 classes, 11 functions, 3 imports</p>
+
+            <div class="command">$ python -m csuite diagram --path ./sample_code --output test.mmd</div>
+            <p><strong>Output:</strong> Mermaid diagram written to test.mmd</p>
+        </div>
+
+        <div class="test-result">
+            <h2>✅ Test 4: CSUITE_OUTPUT_DIR Environment Variable</h2>
+            <div class="command">$ CSUITE_OUTPUT_DIR=/tmp/csuite_docs_test python -m csuite docs --path ./sample_code --output test_docs.md</div>
+            <p><strong>Result:</strong> File successfully created in /tmp/csuite_docs_test/test_docs.md</p>
+        </div>
+
+        <div class="test-result">
+            <h2>📄 Generated Documentation Preview</h2>
+            <div class="doc-preview"># Table of Contents
+
+- [Module: sample_code](#module-samplecode)
+- [Module: sample_code.module_a](#module-samplecodemodulea)
+- [Module: sample_code.module_b](#module-samplecodemoduleb)
+
+## Module: sample_code
+
+Sample code package for testing csuite.
+
+## Module: sample_code.module_a
+
+Module A - Contains sample classes and functions.
+
+### Classes
+
+- **BaseClass** — A base class for demonstration.
+  - Methods:
+    - `__init__(self, name: str)`
+    - `greet(self) -> str` — Return a greeting.
+- **SampleClass** (extends: BaseClass) — A sample class that extends BaseClass.
+  - Methods:
+    - `__init__(self, name: str, value: int = 0)`
+    - `compute(self, x: int) -> int` — Compute a value.
+
+### Functions
+
+- **func_a(x: int) -> str** — Returns a string representation of x.
+- **helper_func(data: list) -> dict** — Transforms a list into a dictionary.
+
+## Module: sample_code.module_b
+
+Module B - Contains more sample classes.
+
+### Classes
+
+- **AnotherClass** — Another class for testing.
+  - Methods:
+    - `__init__(self)`
+    - `add_item(self, item: str) -> None` — Add an item to the list.
+    - `get_items(self) -> list` — Return all items.
+- **ChildClass** (extends: SampleClass) — A child class that extends SampleClass.
+  - Methods:
+    - `compute(self, x: int) -> int` — Override compute with multiplication.
+
+### Functions
+
+- **func_b(text: str) -> str** — Process text by stripping and lowering.</div>
+        </div>
+
+        <div style="margin-top: 40px; padding: 20px; background: #f0f9ff; border-radius: 5px;">
+            <h2>📊 Implementation Summary</h2>
+            <p><strong>Files Changed:</strong></p>
+            <ul>
+                <li>csuite/docs.py - Fully implemented generate_markdown_docs function</li>
+                <li>csuite/main.py - Added base_package parameter to docs command</li>
+            </ul>
+            <p><strong>Status:</strong> Feature complete and all tests passing!</p>
+        </div>
+    </div>
+</body>
+</html>

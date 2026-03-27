@@ -1,0 +1,11 @@
+TEST 1: Generate Mermaid Diagram
+Command: ./venv/bin/python -m csuite diagram --path ./sample_code --output architecture.mmd
+Output: Mermaid diagram written to architecture.mmd
+File created: Yes (614 bytes)
+Status: PASS
+
+File contents verified:
+- Starts with 'classDiagram': YES
+- Contains class definitions (BaseClass, SampleClass, AnotherClass, ChildClass): YES
+- Contains inheritance edges (SampleClass --|> BaseClass): YES
+- Magic methods shown as public (+__init__): YES

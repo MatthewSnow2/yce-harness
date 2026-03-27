@@ -1,0 +1,11 @@
+TEST 3: CSUITE_OUTPUT_DIR Support
+Command: CSUITE_OUTPUT_DIR=/tmp/csuite_qa_test ./venv/bin/python -m csuite diagram --path ./sample_code --output test_diagram.mmd
+Output: Mermaid diagram written to /tmp/csuite_qa_test/test_diagram.mmd
+
+Verification:
+✓ File created in specified directory: /tmp/csuite_qa_test/test_diagram.mmd
+✓ File content is valid Mermaid diagram
+✓ Contains same structure as architecture.mmd (classDiagram, classes, inheritance)
+✓ CSUITE_OUTPUT_DIR environment variable honored
+
+Status: PASS

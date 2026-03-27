@@ -1,0 +1,18 @@
+VERIFICATION TEST: Feature 2 - Diagram Command
+===============================================
+Command: venv/bin/python -m csuite diagram --path ./sample_code --output /tmp/verify_test.mmd
+
+Output:
+Mermaid diagram written to /tmp/verify_test.mmd
+
+File Contents (first 5 lines):
+classDiagram
+    namespace module_a {
+        class BaseClass {
+            +__init__(self, name: str)
+            +greet(self) str
+
+Expected:
+File created starting with "classDiagram"
+
+Result: PASS - Diagram file created correctly with proper Mermaid syntax

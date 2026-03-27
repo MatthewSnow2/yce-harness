@@ -1,0 +1,15 @@
+TEST 2: Verify Diagram Contents
+Command: cat architecture.mmd
+
+Verification checklist:
+✓ File starts with 'classDiagram'
+✓ Contains class BaseClass with +__init__(self, name: str) and +greet(self) str
+✓ Contains class SampleClass with +__init__(self, name: str, value: int = 0) and +compute(self, x: int) int
+✓ Contains class AnotherClass with methods
+✓ Contains class ChildClass
+✓ Contains inheritance: ChildClass --|> SampleClass : extends
+✓ Contains inheritance: SampleClass --|> BaseClass : extends
+✓ Magic methods shown as public (+__init__ not -__init__)
+✓ Namespace organization (module_a, module_b)
+
+Status: PASS
