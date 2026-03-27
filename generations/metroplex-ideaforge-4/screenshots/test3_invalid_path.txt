@@ -1,0 +1,4 @@
+Usage: python -m csuite parse [OPTIONS]
+Try 'python -m csuite parse --help' for help.
+
+Error: Invalid value for '--path': Path '/home/apexaipc/projects/yce-harness/generations/metroplex-ideaforge-4/nonexistent_dir' does not exist.
