@@ -58,6 +58,27 @@ def cite():
 @app.command()
 def report():
     """
-    Generate a report of citations (not implemented yet).
+    Analyze text and list unverified statements.
     """
-    typer.echo("Not implemented yet.")
+    text = sys.stdin.read().strip()
+    if not text:
+        typer.echo("Error: No input provided", err=True)
+        raise typer.Exit(code=1)
+
+    facts = load_kb()
+
+    # Split into sentences (same as cite)
+    sentences = re.split(r'(?<=[.!?])\s+', text)
+
+    # Collect unverified sentences
+    unverified = []
+    for sentence in sentences:
+        match = find_match(sentence, facts)
+        if not match:
+            unverified.append(sentence)
+
+    if unverified:
+        for sentence in unverified:
+            typer.echo(f"- {sentence}")
+    else:
+        typer.echo("All statements verified.")
