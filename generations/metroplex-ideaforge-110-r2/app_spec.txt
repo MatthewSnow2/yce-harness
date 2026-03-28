@@ -1,0 +1,141 @@
+
+
+# LLM Citation Checker - App Specification
+
+## Overview
+A command‑line tool that scans user‑provided text for statements that can be verified against a local knowledge base and either adds citations to verified statements or flags statements that need verification. It serves knowledge workers, researchers, and students who want to quickly check LLM‑generated content for factual support without leaving their terminal.
+
+**Problem Statement**: Users accept LLM outputs as truth without verification, risking misinformation.  
+**Target Audience**: Knowledge workers, researchers, students, and teams who rely on LLMs daily and need to maintain accuracy in their work.
+
+## Tech Stack
+- Python 3.11+
+- typer (for CLI)
+- pydantic (data models)
+- standard library only (json, re, typing)
+
+## Environment Setup
+
+### Prerequisites
+- Python 3.11 or later installed
+- pip (to install dependencies)
+
+### Configuration
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `LCC_KB_PATH` | `data/kb.json` | Path to the local knowledge base JSON file |
+
+## Architecture
+```
+          +-------------------+
+          |   CLI (typer)     |
+          +----------+--------+
+                     |
+          +----------v----------+
+          |   Text Processor    |
+          +----------+----------+
+                     |
+   +-----------------v-----------------+
+   |   Fact Matcher (regex + KB)       |
+   +-----------------+-----------------+
+                     |
+   +-----------------v-----------------+
+   |   Citation Adder / Reporter       |
+   +-----------------+-----------------+
+                     |
+          +----------v----------+
+          |   Output (stdout)    |
+          +---------------------+
+```
+
+## Core Features
+
+### Feature 1: Load Knowledge Base and Lookup Facts
+**Description**: Load a local JSON knowledge base containing fact‑source pairs and provide a function to check whether a given sentence contains any known fact.
+
+**Requirements**:
+- Parse `data/kb.json` into a list of `(fact, source)` entries.
+- Implement a case‑insensitive substring search for each fact within a sentence.
+- Return the first matching fact and its source, or `None` if no match.
+
+**Test Steps**:
+1. `echo 'Paris is the capital of France.' | python -m llm_citation_checker lookup`  
+   Expected stdout:
+   ```
+   Matched fact: Paris is the capital of France.
+   Source: Wikipedia
+   ```
+
+### Feature 2: Add Citations to Verified Statements
+**Description**: Process input text, detect verifiable facts using the knowledge base, and append an inline citation `[Source: <source>]` after each matched fact.
+
+**Requirements**:
+- Split input into sentences using a simple regex (`r'(?<=[.!?])\s+'`).
+- For each sentence, attempt to find a matching fact; if found, append the citation.
+- Output the annotated text preserving original spacing and punctuation.
+
+**Test Steps**:
+1. `echo 'The Eiffel Tower is in Paris.' | python -m llm_citation_checker cite`  
+   Expected stdout:
+   ```
+   The Eiffel Tower is in Paris. [Source: Wikipedia]
+   ```
+
+### Feature 3: Generate Unverified Statements Report
+**Description**: Analyze input text and list sentences that could not be matched to any fact in the knowledge base, indicating they need verification.
+
+**Requirements**:
+- Same sentence segmentation as Feature 2.
+- Collect sentences with no fact match.
+- Print each unverified sentence prefixed by `- `; if none, print `All statements verified.`
+
+**Test Steps**:
+1. `echo 'The moon is made of cheese. Paris is the capital of France.' | python -m llm_citation_checker report`  
+   Expected stdout:
+   ```
+   - The moon is made of cheese.
+   ```
+
+## Data Models
+```python
+from pydantic import BaseModel
+from typing import Optional
+
+class Fact(BaseModel):
+    fact: str
+    source: str
+
+class Statement(BaseModel):
+    text: str
+    verified: bool = False
+    citation: Optional[str] = None
+```
+
+## File Structure
+```
+llm_citation_checker/
+├── main.py
+├── models.py
+├── kb.py
+├── matcher.py
+├── reporter.py
+├── typer_cli.py
+├── data/
+│   └── kb.json
+└── tests/
+    ├── test_matcher.py
+    └── test_reporter.py
+```
+(8 files excluding tests; tests add 2 more, total 10.)
+
+## Success Criteria
+1. Running `lookup` on a sentence present in `data/kb.json` returns the correct fact and source.
+2. Running `cite` on a matched sentence appends the exact `[Source: <source>]` string after the fact.
+3. Running `report` on a mix of verified and unverified sentences lists only the unverified ones.
+4. The tool works entirely offline with no network calls (verified by inspecting that no external URLs are contacted).
+5. All CLI commands complete within 2 seconds for inputs up to 500 characters.
+
+## Constraints & Notes
+- No external API calls — all processing is local
+- Target: working MVP in 5 build iterations
+- Prioritize "works correctly" over "feature complete"
