@@ -2,7 +2,7 @@
 
 ## Overview
 
-Metroplex is the Level 5 autonomy layer for the ST Metro ecosystem. It closes all three human gates in the feedback loop — idea triage, build orchestration, and persona patch application — enabling fully autonomous operation. It is a CLI-only Python application that reads upstream SQLite databases (IdeaForge, Ultra-Magnus, ST Factory), makes autonomous decisions against configurable thresholds, and drives builds via subprocess calls to queue_runner.py.
+Metroplex is the Level 5 autonomy layer for the ST Metro ecosystem. It closes all three human gates in the feedback loop — idea triage, build orchestration, and persona patch application — enabling fully autonomous operation. It is a CLI-only Python application that reads upstream SQLite databases (IdeaForge, Ultra-Magnus, ST Records), makes autonomous decisions against configurable thresholds, and drives builds via subprocess calls to queue_runner.py.
 
 No web UI. No API server. Pure CLI with structured audit logging.
 
@@ -25,7 +25,7 @@ No web UI. No API server. Pure CLI with structured audit logging.
 
 ### Prerequisites
 - Python 3.12+
-- Access to upstream SQLite databases (IdeaForge, Ultra-Magnus, ST Factory)
+- Access to upstream SQLite databases (IdeaForge, Ultra-Magnus, ST Records)
 - Access to yce-harness directory (for queue_runner.py)
 - Git installed (for persona patch operations)
 
@@ -37,9 +37,9 @@ All configuration lives in `config.py` with environment variable overrides and s
 |----------|----------|---------|-------------|
 | `METROPLEX_IDEAFORGE_DB` | No | `/home/apexaipc/projects/ideaforge/data/ideaforge.db` | IdeaForge database path |
 | `METROPLEX_UM_DB` | No | `/home/apexaipc/projects/ultra-magnus/idea-factory/data/idea-factory.db` | Ultra-Magnus database path |
-| `METROPLEX_STFACTORY_DB` | No | `/home/apexaipc/projects/st-factory/data/persona_metrics.db` | ST Factory database path |
+| `METROPLEX_STFACTORY_DB` | No | `/home/apexaipc/projects/st-records/data/persona_metrics.db` | ST Records database path |
 | `METROPLEX_YCE_DIR` | No | `/home/apexaipc/projects/yce-harness` | yce-harness directory (where queue_runner.py lives) |
-| `METROPLEX_ACADEMY_REPO` | No | `m2ai-portfolio/agent-persona-academy` | GitHub repo for persona YAML files |
+| `METROPLEX_ACADEMY_REPO` | No | `m2ai-ultra-magnus-IF/st-agent-registry` | GitHub repo for persona YAML files |
 | `METROPLEX_BUILD_MODEL` | No | `opus` | Model passed to queue_runner.py for builds |
 | `METROPLEX_APPROVE_THRESHOLD` | No | `70` | Triage score >= this → auto-approve (0-100 scale) |
 | `METROPLEX_REJECT_THRESHOLD` | No | `40` | Triage score < this → auto-reject (0-100 scale) |
@@ -73,7 +73,7 @@ All configuration lives in `config.py` with environment variable overrides and s
                      └──────┬──────────────┬───────────────┬────────┘
                             │              │               │
                      ┌──────▼──────┐ ┌─────▼─────┐ ┌──────▼──────┐
-                     │  IdeaForge  │ │ ST Factory │ │Ultra-Magnus │
+                     │  IdeaForge  │ │ ST Records │ │Ultra-Magnus │
                      │ ideaforge.db│ │persona_    │ │idea-factory │
                      │  (read)     │ │metrics.db  │ │   .db       │
                      │             │ │(read+write │ │  (read)     │
@@ -85,7 +85,7 @@ All configuration lives in `config.py` with environment variable overrides and s
 Data flow:
 1. **Gate 1 (Triage)**: Reads IdeaForge `ideas` table → scores ideas → writes decisions to `metroplex.db`
 2. **Gate 2 (Build)**: Reads approved ideas → generates app spec via Jinja2 template → calls `queue_runner.py add` + `queue_runner.py start` via subprocess
-3. **Gate 3 (Patch)**: Reads ST Factory `persona_patches` with `status='proposed'` → clones/pulls Academy repo → applies YAML patches → commits + pushes → updates `persona_patches.status` to `applied`
+3. **Gate 3 (Patch)**: Reads ST Records `persona_patches` with `status='proposed'` → clones/pulls Academy repo → applies YAML patches → commits + pushes → updates `persona_patches.status` to `applied`
 
 ---
 
@@ -144,9 +144,9 @@ Data flow:
 
 **Test Steps**:
 1. Create an in-memory SQLite DB with IdeaForge schema, insert 3 test ideas with scores, verify `get_unprocessed_ideas()` returns them sorted by weighted_score DESC
-2. Create an in-memory SQLite DB with ST Factory schema, insert 2 proposed patches, verify `get_proposed_patches()` returns them
+2. Create an in-memory SQLite DB with ST Records schema, insert 2 proposed patches, verify `get_proposed_patches()` returns them
 3. Create an in-memory SQLite DB with UM schema, insert a build result, verify `get_recent_builds()` returns it
-4. Verify `update_patch_status()` changes the status column in ST Factory DB
+4. Verify `update_patch_status()` changes the status column in ST Records DB
 5. Verify all readers raise `FileNotFoundError` if DB path doesn't exist (not silently fail)
 
 ---
@@ -248,7 +248,7 @@ Data flow:
 ---
 
 ### Feature 6: Gate 3 — Patch Auto-Apply
-**Description**: Reads proposed persona patches from ST Factory, clones/pulls the Academy repo, applies YAML modifications, commits, pushes, and updates patch status.
+**Description**: Reads proposed persona patches from ST Records, clones/pulls the Academy repo, applies YAML modifications, commits, pushes, and updates patch status.
 
 **Requirements**:
 - `gates/patcher.py`:
@@ -286,7 +286,7 @@ Data flow:
 2. Apply a "replace" operation at path "/voice/tone" with value "formal" → verify key changed
 3. Apply a "remove" operation at path "/voice/tone" → verify key removed
 4. Verify per-cycle cap: feed 7 patches → only first 5 processed
-5. Verify dry_run=True does NOT call any subprocess or modify ST Factory DB
+5. Verify dry_run=True does NOT call any subprocess or modify ST Records DB
 6. Mock subprocess for git operations, verify correct commands constructed
 7. Verify failed git push → PatchApplication has status="failed", next patch still attempted
 
@@ -440,7 +440,7 @@ CREATE INDEX idx_cycles_started ON cycles(started_at);
 -- WHERE status = 'scored' AND weighted_score IS NOT NULL
 ```
 
-**ST Factory — `persona_patches` table (key columns for patching)**:
+**ST Records — `persona_patches` table (key columns for patching)**:
 ```sql
 -- Metroplex reads these columns:
 -- id, patch_id, persona_id, rationale, from_version, to_version,
@@ -478,7 +478,7 @@ metroplex/
 ├── readers/
 │   ├── __init__.py
 │   ├── ideaforge_reader.py   # Read IdeaForge SQLite
-│   ├── stfactory_reader.py   # Read ST Factory SQLite
+│   ├── stfactory_reader.py   # Read ST Records SQLite
 │   └── um_reader.py          # Read Ultra-Magnus SQLite
 ├── spec_templates/
 │   └── app_spec_template.md  # Jinja2 template for generated app specs
@@ -521,7 +521,7 @@ metroplex/
 
 - **No web UI, no API server** — this is a CLI-only application
 - **No cross-project Python imports** — all upstream data accessed via direct SQLite reads with `?mode=ro` URI
-- **Single write target** — only ST Factory's `persona_patches.status` column is written to externally. Everything else is read-only or writes to Metroplex's own `metroplex.db`
+- **Single write target** — only ST Records's `persona_patches.status` column is written to externally. Everything else is read-only or writes to Metroplex's own `metroplex.db`
 - **subprocess for all external operations** — queue_runner.py, git clone, git commit, git push are all called via `subprocess.run()`. Do NOT import queue_runner.py as a module.
 - **IdeaForge score scaling** — IdeaForge `weighted_score` is 0-10 scale. Metroplex scales to 0-100 by multiplying by 10 before applying thresholds.
 - **Per-cycle caps are hard limits** — once hit, remaining items are deferred, never silently dropped

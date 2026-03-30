@@ -29,7 +29,7 @@ from arcade_config import (
 # Default Academy personas directory
 ACADEMY_DIR = Path(os.environ.get(
     "ACADEMY_PERSONAS_DIR",
-    str(Path.home() / "projects" / "agent-persona-academy" / "personas"),
+    str(Path.home() / "projects" / "st-agent-registry" / "personas"),
 ))
 
 # Prompts directory for prompt_file resolution
