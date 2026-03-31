@@ -1,12 +1,9 @@
 #!/bin/bash
 set -e
 
-echo "=== MCP Observability Layer Setup ==="
+cd "$(dirname "$0")"
 
-# Check Python version
-python3 --version || { echo "Python 3.11+ required"; exit 1; }
-
-# Create virtual environment if not exists
+# Create virtual environment if it doesn't exist
 if [ ! -d "venv" ]; then
     echo "Creating virtual environment..."
     python3 -m venv venv
@@ -16,19 +13,13 @@ fi
 source venv/bin/activate
 
 # Install dependencies
-echo "Installing dependencies..."
-pip install --upgrade pip > /dev/null 2>&1
-pip install -r requirements.txt > /dev/null 2>&1
+if [ -f "requirements.txt" ]; then
+    echo "Installing dependencies..."
+    pip install -q -r requirements.txt
+fi
 
-# Install package in editable mode
-echo "Installing mcp-obs package..."
-pip install -e . > /dev/null 2>&1
-
-# Create default database directory
-mkdir -p ~/.mcp-obs
-
-echo ""
-echo "=== Setup Complete ==="
-echo "Run: source venv/bin/activate"
-echo "Then: mcp-obs --help"
-echo "Or: python -m src.mcp_obs.main --help"
+# Start MCP Observability Server with demo data
+echo "Starting MCP Observability Server..."
+echo "Web dashboard: http://localhost:8766"
+echo "MCP server: localhost:8765"
+python -m src.main serve --demo

@@ -9,7 +9,9 @@ fi
 
 # Activate and install dependencies
 source venv/bin/activate
-pip install -e ".[dev]" 2>/dev/null || pip install -r requirements.txt 2>/dev/null || pip install click httpx pydantic pytest
+pip install --upgrade pip setuptools wheel
+pip install -e ".[dev]" 2>/dev/null || pip install -r requirements-dev.txt
 
+echo ""
 echo "SkillHub CLI development environment ready."
 echo "Run 'skillhub --help' to get started."

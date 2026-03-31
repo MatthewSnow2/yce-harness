@@ -356,9 +356,29 @@ async def run_parallel_agent(
         )
 
         if not is_linear_initialized(project_dir):
-            print("\nError: Project initialization did not complete.")
-            print("Run without --parallel first to initialize the project.")
-            return 1
+            # Check for source code as alternative success signal.
+            # The agent may have built the entire project in one iteration
+            # without writing .linear_project.json — detect that case by
+            # looking for generated source files.
+            source_extensions = (".py", ".js", ".ts", ".jsx", ".tsx", ".rs", ".go", ".java")
+            generated_files = [
+                p for p in project_dir.rglob("*")
+                if p.is_file()
+                and p.suffix in source_extensions
+                and ".git" not in p.parts
+                and "node_modules" not in p.parts
+                and "__pycache__" not in p.parts
+            ]
+            if generated_files:
+                print(f"\nWarning: .linear_project.json not written, but {len(generated_files)} "
+                      f"source file(s) detected — treating init as successful.")
+                print("  The agent completed the build without writing the marker file.")
+                print("  Skipping parallel tier execution (project already built).")
+                return 0
+            else:
+                print("\nError: Project initialization did not complete.")
+                print("Run without --parallel first to initialize the project.")
+                return 1
 
     # Load project state
     state = load_linear_project_state(project_dir)

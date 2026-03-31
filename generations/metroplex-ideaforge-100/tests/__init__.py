@@ -1,1 +1,1 @@
-"""Test suite for MCP Observability Layer."""
+"""Tests for MCP Observability."""

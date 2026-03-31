@@ -95,6 +95,12 @@ class QueueJob(BaseModel):
     started_at: str | None = None
     completed_at: str | None = None
     duration_seconds: float | None = None
+    # Cost tracking (populated on completion from SDK usage stats)
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    model_used: str | None = None
+    # Session context for retries (Paperclip session compaction)
+    session_context_path: str | None = None
 
 
 class QueueState(BaseModel):
@@ -217,23 +223,34 @@ def _run_job(job: QueueJob, dry_run: bool = False) -> None:
 
         start_time = time.monotonic()
 
-        result = subprocess.run(
+        # Launch in its own process group so we can kill all children on completion
+        proc = subprocess.Popen(
             cmd,
             cwd=str(HARNESS_DIR),
+            preexec_fn=os.setsid,
         )
 
+        try:
+            proc.wait()
+        finally:
+            # Kill the entire process group (catches orphan http.server etc.)
+            _kill_process_group(proc.pid)
+
         elapsed = time.monotonic() - start_time
-        job.exit_code = result.returncode
+        job.exit_code = proc.returncode
         job.duration_seconds = round(elapsed, 1)
         job.completed_at = datetime.now(timezone.utc).isoformat()
 
-        if result.returncode == 0:
+        # Record which model was actually used for cost tracking
+        job.model_used = job.model
+
+        if proc.returncode == 0:
             job.status = JobStatus.completed
-        elif result.returncode == 130:
+        elif proc.returncode == 130:
             job.status = JobStatus.interrupted
         else:
             job.status = JobStatus.failed
-            job.error = f"Process exited with code {result.returncode}"
+            job.error = f"Process exited with code {proc.returncode}"
 
     except KeyboardInterrupt:
         job.status = JobStatus.interrupted
@@ -243,6 +260,36 @@ def _run_job(job: QueueJob, dry_run: bool = False) -> None:
         job.status = JobStatus.failed
         job.error = str(e)
         job.completed_at = datetime.now(timezone.utc).isoformat()
+
+
+# --- Process Cleanup ---
+
+
+def _kill_process_group(pid: int) -> None:
+    """Kill all processes in the process group of the given PID.
+
+    Sends SIGTERM first, waits briefly, then SIGKILL for stragglers.
+    Defensive — silently ignores already-dead processes.
+    """
+    try:
+        pgid = os.getpgid(pid)
+    except (ProcessLookupError, OSError):
+        return  # Process already gone
+
+    # Phase 1: SIGTERM
+    try:
+        os.killpg(pgid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError, OSError):
+        return  # Group already gone
+
+    # Brief grace period for clean shutdown
+    time.sleep(0.5)
+
+    # Phase 2: SIGKILL any survivors
+    try:
+        os.killpg(pgid, signal.SIGKILL)
+    except (ProcessLookupError, PermissionError, OSError):
+        pass  # Already dead — expected
 
 
 # --- Process Registry ---
@@ -400,6 +447,10 @@ async def _run_job_async(
             print(f"  [{job.id}] {line.decode().rstrip()}", flush=True)
 
         await proc.wait()
+
+        # Kill any orphan child processes (e.g. http.server started during build)
+        _kill_process_group(proc.pid)
+
         registry.unregister(job.id)
 
         elapsed = time.monotonic() - start_time
