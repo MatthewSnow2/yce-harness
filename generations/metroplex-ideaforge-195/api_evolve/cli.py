@@ -2,6 +2,7 @@
 
 import click
 from .register import register_api, list_apis, format_api_table
+from .usage import record_usage, get_price_info
 
 
 @click.group()
@@ -36,15 +37,28 @@ def list_cmd():
 @click.option('--api', required=True, help='API name')
 @click.option('--units', required=True, type=int, help='Number of units used')
 def usage_cmd(api: str, units: int):
-    """Record usage for an API (Feature 2 - not implemented yet)."""
-    click.echo("Feature 2 (Usage Tracking) not implemented yet.")
+    """Record usage for an API."""
+    try:
+        # Validate units at CLI level
+        if units <= 0:
+            raise ValueError("Units must be a positive integer.")
+        message = record_usage(api, units)
+        click.echo(message)
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
 
 
 @cli.command('price')
 @click.option('--api', required=True, help='API name')
 def price_cmd(api: str):
-    """Show current price and usage stats (Feature 2 - not implemented yet)."""
-    click.echo("Feature 2 (Pricing) not implemented yet.")
+    """Show current price and usage stats."""
+    try:
+        info = get_price_info(api)
+        click.echo(info)
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
 
 
 @cli.command('token')
