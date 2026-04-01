@@ -3,6 +3,7 @@
 import click
 from .register import register_api, list_apis, format_api_table
 from .usage import record_usage, get_price_info
+from .token import generate_token, check_token
 
 
 @click.group()
@@ -65,13 +66,19 @@ def price_cmd(api: str):
 @click.option('--api', required=True, help='API name')
 @click.option('--user', required=True, help='Username')
 def token_cmd(api: str, user: str):
-    """Generate an access token (Feature 3 - not implemented yet)."""
-    click.echo("Feature 3 (Token Generation) not implemented yet.")
+    """Generate an access token."""
+    try:
+        message = generate_token(api, user)
+        click.echo(message)
+    except ValueError as e:
+        click.echo(f"Error: {e}", err=True)
+        raise SystemExit(1)
 
 
 @cli.command('check')
 @click.option('--token', required=True, help='Token to validate')
 @click.option('--api', help='API name (optional)')
 def check_cmd(token: str, api: str):
-    """Validate an access token (Feature 3 - not implemented yet)."""
-    click.echo("Feature 3 (Token Validation) not implemented yet.")
+    """Validate an access token."""
+    result = check_token(token, api)
+    click.echo(result)
