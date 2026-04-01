@@ -1,0 +1,95 @@
+═══════════════════════════════════════════════════════════════════════════════
+M2A-647: Feature 1 - API Registration & Discovery - Test Results
+═══════════════════════════════════════════════════════════════════════════════
+
+TEST 1: Register new API
+───────────────────────────────────────────────────────────────────────────────
+$ python3 -m api_evolve.main register --name "weather" --desc "Provides weather data" --price 0.01
+
+Output:
+API 'weather' registered successfully.
+
+Status: ✓ PASS
+
+
+TEST 2: Prevent duplicate API names
+───────────────────────────────────────────────────────────────────────────────
+$ python3 -m api_evolve.main register --name "weather" --desc "Another" --price 0.02
+
+Output:
+Error: API with name 'weather' already exists.
+
+Status: ✓ PASS (duplicate correctly rejected)
+
+
+TEST 3: List registered APIs
+───────────────────────────────────────────────────────────────────────────────
+$ python3 -m api_evolve.main list
+
+Output:
++---------+-----------------------+-------+
+| name    | description           | price |
++---------+-----------------------+-------+
+| weather | Provides weather data | 0.01  |
++---------+-----------------------+-------+
+
+Status: ✓ PASS (table displayed correctly)
+
+
+TEST 4: Register additional APIs
+───────────────────────────────────────────────────────────────────────────────
+$ python3 -m api_evolve.main register --name "geocode" --desc "Location geocoding service" --price 0.05
+
+Output:
+API 'geocode' registered successfully.
+
+$ python3 -m api_evolve.main register --name "translate" --desc "Text translation API" --price 0.02
+
+Output:
+API 'translate' registered successfully.
+
+Status: ✓ PASS
+
+
+TEST 5: List all APIs (verify sorting by name)
+───────────────────────────────────────────────────────────────────────────────
+$ python3 -m api_evolve.main list
+
+Output:
++-----------+----------------------------+-------+
+| name      | description                | price |
++-----------+----------------------------+-------+
+| geocode   | Location geocoding service | 0.05  |
+| translate | Text translation API       | 0.02  |
+| weather   | Provides weather data      | 0.01  |
++-----------+----------------------------+-------+
+
+Status: ✓ PASS (all 3 APIs listed, sorted alphabetically)
+
+
+═══════════════════════════════════════════════════════════════════════════════
+SUMMARY: ALL TESTS PASSED ✓
+═══════════════════════════════════════════════════════════════════════════════
+
+FILES CREATED:
+  • api_evolve/__init__.py
+  • api_evolve/main.py (CLI entry point)
+  • api_evolve/cli.py (command definitions)
+  • api_evolve/db.py (SQLite connection & schema)
+  • api_evolve/models.py (dataclasses)
+  • api_evolve/register.py (registration & listing logic)
+  • api_evolve/usage.py (stub for Feature 2)
+  • api_evolve/token.py (stub for Feature 3)
+
+DATABASE:
+  • SQLite database created at: ./api_evolve.db
+  • Tables: apis, usage, tokens
+
+REQUIREMENTS VERIFICATION:
+  ✓ Store API name, description, price in SQLite
+  ✓ Prevent duplicate API names
+  ✓ List APIs in readable table format
+  ✓ Stubs created for Feature 2 & 3
+  ✓ CLI commands work as specified
+  ✓ Price formatting shows 2 decimal places
+  ✓ APIs sorted alphabetically by name
