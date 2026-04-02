@@ -1,5 +1,5 @@
-"""Entry point for running ClaudeOps as a module."""
+"""Entry point for python -m claudeops."""
+from .cli import main
 
-if __name__ == '__main__':
-    from claudeops.metrics import main
+if __name__ == "__main__":
     main()

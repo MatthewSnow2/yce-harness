@@ -8,4 +8,4 @@ cd "$(dirname "$0")"
 mkdir -p logs mcp
 
 # Run the ClaudeOps dashboard in test mode
-python -m claudeops.cli --test-mode
+python3 -m claudeops.cli --test-mode
