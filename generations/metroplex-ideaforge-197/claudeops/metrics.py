@@ -16,7 +16,7 @@ class MetricsStore:
         """Initialize metrics store with log directory."""
         if log_dir is None:
             log_dir = os.environ.get('CLAUDEOPS_LOG_DIR', './logs')
-        self.log_dir = Path(log_dir)
+        self.log_dir = Path(log_dir).resolve()
 
         # Rolling window of last 20 latency values
         self.latency_window = deque(maxlen=20)
