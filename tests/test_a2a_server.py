@@ -24,7 +24,7 @@ def mock_context():
 @pytest.fixture
 def mock_event_queue():
     eq = AsyncMock()
-    eq.enqueue = AsyncMock()
+    eq.enqueue_event = AsyncMock()
     return eq
 
 
@@ -95,8 +95,8 @@ class TestExecuteFailure:
         await executor.execute(mock_context, mock_event_queue)
 
         # Should have emitted exactly one event (failed)
-        assert mock_event_queue.enqueue.call_count == 1
-        event = mock_event_queue.enqueue.call_args[0][0]
+        assert mock_event_queue.enqueue_event.call_count == 1
+        event = mock_event_queue.enqueue_event.call_args[0][0]
         assert event.final is True
         assert event.status.state.value == "failed"
 
@@ -121,8 +121,8 @@ class TestExecuteFailure:
                     await executor.execute(mock_context, mock_event_queue)
 
         # Should have: working + failed = 2 events
-        assert mock_event_queue.enqueue.call_count == 2
-        last_event = mock_event_queue.enqueue.call_args_list[-1][0][0]
+        assert mock_event_queue.enqueue_event.call_count == 2
+        last_event = mock_event_queue.enqueue_event.call_args_list[-1][0][0]
         assert last_event.final is True
         assert last_event.status.state.value == "failed"
 
@@ -171,13 +171,13 @@ class TestPollLoop:
                         await executor.execute(mock_context, mock_event_queue)
 
         # Events: working + artifact + completed = 3
-        assert mock_event_queue.enqueue.call_count == 3
+        assert mock_event_queue.enqueue_event.call_count == 3
         # Check final event is completed
-        final_event = mock_event_queue.enqueue.call_args_list[-1][0][0]
+        final_event = mock_event_queue.enqueue_event.call_args_list[-1][0][0]
         assert final_event.final is True
         assert final_event.status.state.value == "completed"
         # Check artifact contains project_dir
-        artifact_event = mock_event_queue.enqueue.call_args_list[1][0][0]
+        artifact_event = mock_event_queue.enqueue_event.call_args_list[1][0][0]
         part = artifact_event.artifact.parts[0]
         # Part may be a union -- access .root.text if wrapped, else .text
         text = getattr(part, "text", None) or part.root.text
@@ -224,8 +224,8 @@ class TestPollLoop:
                         await executor.execute(mock_context, mock_event_queue)
 
         # Events: working + failed = 2
-        assert mock_event_queue.enqueue.call_count == 2
-        final_event = mock_event_queue.enqueue.call_args_list[-1][0][0]
+        assert mock_event_queue.enqueue_event.call_count == 2
+        final_event = mock_event_queue.enqueue_event.call_args_list[-1][0][0]
         assert final_event.final is True
         assert final_event.status.state.value == "failed"
 
@@ -237,6 +237,6 @@ class TestCancel:
             mock_pid.exists.return_value = False
             await executor.cancel(mock_context, mock_event_queue)
 
-        assert mock_event_queue.enqueue.call_count == 1
-        event = mock_event_queue.enqueue.call_args[0][0]
+        assert mock_event_queue.enqueue_event.call_count == 1
+        event = mock_event_queue.enqueue_event.call_args[0][0]
         assert event.status.state.value == "canceled"
