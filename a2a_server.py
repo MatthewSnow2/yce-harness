@@ -50,6 +50,18 @@ POLL_INTERVAL = 5  # seconds
 class YCEBuildExecutor(AgentExecutor):
     """Executes YCE builds by shelling out to queue_runner.py."""
 
+    async def _emit(self, event_queue: EventQueue, event) -> None:
+        """Emit an event with compatibility shim for a2a-sdk API changes."""
+        if hasattr(event_queue, "enqueue_event"):
+            await event_queue.enqueue_event(event)
+        elif hasattr(event_queue, "enqueue"):
+            await event_queue.enqueue(event)
+        else:
+            raise AttributeError(
+                f"EventQueue has neither enqueue_event nor enqueue. "
+                f"Available: {[m for m in dir(event_queue) if not m.startswith('_')]}"
+            )
+
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id = context.task_id
         context_id = context.context_id
@@ -58,7 +70,7 @@ class YCEBuildExecutor(AgentExecutor):
         try:
             params = self._extract_params(context.message)
         except (ValueError, KeyError) as e:
-            await event_queue.enqueue_event(
+            await self._emit(event_queue,
                 TaskStatusUpdateEvent(
                     task_id=task_id,
                     context_id=context_id,
@@ -72,7 +84,7 @@ class YCEBuildExecutor(AgentExecutor):
             return
 
         # Signal working
-        await event_queue.enqueue_event(
+        await self._emit(event_queue,
             TaskStatusUpdateEvent(
                 task_id=task_id,
                 context_id=context_id,
@@ -107,7 +119,7 @@ class YCEBuildExecutor(AgentExecutor):
             )
             if result.returncode != 0:
                 error = result.stderr.strip() or result.stdout.strip() or "queue_runner add failed"
-                await event_queue.enqueue_event(
+                await self._emit(event_queue,
                     TaskStatusUpdateEvent(
                         task_id=task_id, context_id=context_id, final=True,
                         status=TaskStatus(state=TaskState.failed, message=Message(
@@ -118,7 +130,7 @@ class YCEBuildExecutor(AgentExecutor):
                 )
                 return
         except subprocess.TimeoutExpired:
-            await event_queue.enqueue_event(
+            await self._emit(event_queue,
                 TaskStatusUpdateEvent(
                     task_id=task_id, context_id=context_id, final=True,
                     status=TaskStatus(state=TaskState.failed, message=Message(
@@ -162,7 +174,7 @@ class YCEBuildExecutor(AgentExecutor):
                     "project_dir": job_data.get("project_dir", ""),
                     "status": "completed",
                 })
-                await event_queue.enqueue_event(
+                await self._emit(event_queue,
                     TaskArtifactUpdateEvent(
                         task_id=task_id, context_id=context_id,
                         artifact=Artifact(
@@ -172,7 +184,7 @@ class YCEBuildExecutor(AgentExecutor):
                         ),
                     )
                 )
-                await event_queue.enqueue_event(
+                await self._emit(event_queue,
                     TaskStatusUpdateEvent(
                         task_id=task_id, context_id=context_id, final=True,
                         status=TaskStatus(state=TaskState.completed),
@@ -182,7 +194,7 @@ class YCEBuildExecutor(AgentExecutor):
 
             if job_status == "failed":
                 error_msg = job_data.get("error", "Build failed")
-                await event_queue.enqueue_event(
+                await self._emit(event_queue,
                     TaskStatusUpdateEvent(
                         task_id=task_id, context_id=context_id, final=True,
                         status=TaskStatus(state=TaskState.failed, message=Message(
@@ -194,7 +206,7 @@ class YCEBuildExecutor(AgentExecutor):
                 return
 
         # Timeout
-        await event_queue.enqueue_event(
+        await self._emit(event_queue,
             TaskStatusUpdateEvent(
                 task_id=task_id, context_id=context_id, final=True,
                 status=TaskStatus(state=TaskState.failed, message=Message(
@@ -213,7 +225,7 @@ class YCEBuildExecutor(AgentExecutor):
             except (ValueError, ProcessLookupError, PermissionError):
                 pass
 
-        await event_queue.enqueue_event(
+        await self._emit(event_queue,
             TaskStatusUpdateEvent(
                 task_id=context.task_id,
                 context_id=context.context_id,
