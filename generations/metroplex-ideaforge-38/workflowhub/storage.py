@@ -157,3 +157,25 @@ def get_links_for_item(item_id: str, item_type: str) -> List[Tuple[str, str]]:
     links = [(row['target_type'], row['target_id']) for row in cursor.fetchall()]
     conn.close()
     return links
+
+
+def link_exists(source_type: str, source_id: str, target_type: str, target_id: str) -> bool:
+    """
+    Check if a link already exists between two items.
+
+    Returns True if link exists in either direction.
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    # Check both directions
+    cursor.execute("""
+        SELECT 1 FROM links
+        WHERE (source_type = ? AND source_id = ? AND target_type = ? AND target_id = ?)
+           OR (source_type = ? AND source_id = ? AND target_type = ? AND target_id = ?)
+    """, (source_type, source_id, target_type, target_id,
+          target_type, target_id, source_type, source_id))
+
+    exists = cursor.fetchone() is not None
+    conn.close()
+    return exists

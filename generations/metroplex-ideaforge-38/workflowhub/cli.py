@@ -4,6 +4,7 @@ import argparse
 import sys
 from workflowhub.importer import import_artifacts
 from workflowhub.feeder import display_feed
+from workflowhub.linker import create_link
 
 
 def cmd_import(args):
@@ -20,9 +21,11 @@ def cmd_feed(args):
 
 
 def cmd_link(args):
-    """Handle the link command (placeholder for Feature 3)."""
-    print("Link command not yet implemented (Feature 3)")
-    sys.exit(1)
+    """Handle the link command."""
+    source = args.source
+    target = args.target
+    result = create_link(source, target)
+    print(result)
 
 
 def main():
