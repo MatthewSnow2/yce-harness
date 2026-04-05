@@ -3,6 +3,7 @@
 import argparse
 import sys
 from workflowhub.importer import import_artifacts
+from workflowhub.feeder import display_feed
 
 
 def cmd_import(args):
@@ -13,9 +14,9 @@ def cmd_import(args):
 
 
 def cmd_feed(args):
-    """Handle the feed command (placeholder for Feature 2)."""
-    print("Feed command not yet implemented (Feature 2)")
-    sys.exit(1)
+    """Handle the feed command."""
+    limit = args.limit
+    display_feed(limit)
 
 
 def cmd_link(args):
