@@ -1,0 +1,5 @@
+TEST: Feature 3 Test 4 - Non-Existent Artifact
+COMMAND: python -m workflowhub.cli link --source slack:nonexist --target notion:n1
+OUTPUT: Error: Source artifact not found: slack:nonexist
+EXIT CODE: 1
+STATUS: PASS - Proper error handling, artifact existence validation works

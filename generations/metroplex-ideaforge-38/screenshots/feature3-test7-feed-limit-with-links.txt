@@ -1,0 +1,7 @@
+TEST: Feature 3 Test 7 - Feed Limit with Links
+COMMAND: python -m workflowhub.cli feed --limit 3
+OUTPUT:
+[notion] n1: Sprint planning notes (2024-01-15T11:00:00+00:00) → slack:s1
+[slack] s2: Deploy v2.1 approved (2024-01-15T10:30:00+00:00) → email:e1
+[slack] s1: Team standup discussion (2024-01-15T09:00:00+00:00) → notion:n1
+STATUS: PASS - Only 3 items displayed, links correctly shown on limited results

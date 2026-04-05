@@ -1,0 +1,5 @@
+TEST: Feature 3 Test 3 - Self-Linking Prevention
+COMMAND: python -m workflowhub.cli link --source slack:s1 --target slack:s1
+OUTPUT: Error: Cannot link an artifact to itself (slack:s1)
+EXIT CODE: 1
+STATUS: PASS - Proper error handling, no crash, clear error message

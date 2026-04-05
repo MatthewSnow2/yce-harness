@@ -1,0 +1,12 @@
+TEST: Feature 3 Test 6 - Multiple Links and Feed Display
+COMMAND: 
+  python -m workflowhub.cli link --source slack:s2 --target email:e1
+  python -m workflowhub.cli feed
+OUTPUT (link creation): Linked slack:s2 ←→ email:e1
+OUTPUT (feed):
+[notion] n1: Sprint planning notes (2024-01-15T11:00:00+00:00) → slack:s1
+[slack] s2: Deploy v2.1 approved (2024-01-15T10:30:00+00:00) → email:e1
+[slack] s1: Team standup discussion (2024-01-15T09:00:00+00:00) → notion:n1
+[email] e1: Client feedback on v2.0 (2024-01-14T16:00:00+00:00) → slack:s2
+[notion] n2: API design doc (2024-01-14T14:00:00+00:00)
+STATUS: PASS - Both link pairs (s1↔n1 and s2↔e1) are visible in feed with correct arrow notation

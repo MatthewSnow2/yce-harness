@@ -1,0 +1,9 @@
+TEST: Feature 3 Test 2 - Verify Links in Feed
+COMMAND: python -m workflowhub.cli feed
+OUTPUT:
+[notion] n1: Sprint planning notes (2024-01-15T11:00:00+00:00) → slack:s1
+[slack] s2: Deploy v2.1 approved (2024-01-15T10:30:00+00:00)
+[slack] s1: Team standup discussion (2024-01-15T09:00:00+00:00) → notion:n1
+[email] e1: Client feedback on v2.0 (2024-01-14T16:00:00+00:00)
+[notion] n2: API design doc (2024-01-14T14:00:00+00:00)
+STATUS: PASS - Both s1 and n1 show links with → arrow notation pointing to each other

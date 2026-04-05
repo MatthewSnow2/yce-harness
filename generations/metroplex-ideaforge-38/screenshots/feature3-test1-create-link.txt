@@ -1,0 +1,4 @@
+TEST: Feature 3 Test 1 - Create Link
+COMMAND: python -m workflowhub.cli link --source slack:s1 --target notion:n1
+OUTPUT: Linked slack:s1 ←→ notion:n1
+STATUS: PASS - Link created successfully with bidirectional arrow notation

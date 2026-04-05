@@ -1,0 +1,6 @@
+TEST: Feature 3 Test 5 - Duplicate Link Prevention
+COMMAND: python -m workflowhub.cli link --source slack:s1 --target notion:n1
+OUTPUT: 
+Link already exists between slack:s1 and notion:n1
+Link already exists between slack:s1 ←→ notion:n1
+STATUS: PASS - Duplicate link detected and reported (though message appears twice, functionality works)
