@@ -42,6 +42,7 @@ YCE_DIR = Path(__file__).parent
 QUEUE_RUNNER = YCE_DIR / "queue_runner.py"
 YCE_PYTHON = YCE_DIR / "venv" / "bin" / "python"
 RUNNER_PID_FILE = YCE_DIR / "data" / "runner.pid"
+RUNNER_LOG = YCE_DIR / "data" / "runner.log"
 
 BUILD_TIMEOUT = 5400  # 90 minutes
 POLL_INTERVAL = 5  # seconds
@@ -61,6 +62,30 @@ class YCEBuildExecutor(AgentExecutor):
                 f"EventQueue has neither enqueue_event nor enqueue. "
                 f"Available: {[m for m in dir(event_queue) if not m.startswith('_')]}"
             )
+
+    def _ensure_runner_started(self) -> None:
+        """Start queue_runner if not already running. Safe to call repeatedly."""
+        try:
+            if RUNNER_PID_FILE.exists():
+                pid = int(RUNNER_PID_FILE.read_text().strip())
+                os.kill(pid, 0)  # Check if alive
+                logger.info("queue_runner already running (PID %d)", pid)
+                return
+        except (ValueError, ProcessLookupError, PermissionError):
+            # Stale or invalid PID file -- fall through to start
+            pass
+
+        try:
+            log_fh = open(RUNNER_LOG, "a")
+            proc = subprocess.Popen(
+                [str(YCE_PYTHON), str(QUEUE_RUNNER), "start"],
+                stdout=log_fh,
+                stderr=log_fh,
+                start_new_session=True,
+            )
+            logger.info("Started queue_runner (PID %d)", proc.pid)
+        except Exception:
+            logger.exception("Failed to start queue_runner")
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         task_id = context.task_id
@@ -140,6 +165,9 @@ class YCEBuildExecutor(AgentExecutor):
                 )
             )
             return
+
+        # Ensure the queue_runner process is running to consume the job
+        await asyncio.to_thread(self._ensure_runner_started)
 
         # Poll queue_runner.py status until terminal
         elapsed = 0
@@ -235,10 +263,20 @@ class YCEBuildExecutor(AgentExecutor):
         )
 
     def _extract_params(self, message: Message) -> dict:
-        """Extract build parameters from the first TextPart as JSON."""
+        """Extract build parameters from the first TextPart as JSON.
+
+        a2a-sdk 0.3.25 wraps parts in a discriminated union (Part) where
+        the actual TextPart lives at part.root. Handle both the direct
+        TextPart case (older SDK) and the wrapper case.
+        """
         for part in message.parts:
+            # Direct TextPart (older SDK versions)
             if isinstance(part, TextPart):
                 return json.loads(part.text)
+            # Discriminated union wrapper (a2a-sdk 0.3.25+)
+            inner = getattr(part, "root", None)
+            if isinstance(inner, TextPart):
+                return json.loads(inner.text)
         raise ValueError("No TextPart found in message")
 
 

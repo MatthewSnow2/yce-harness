@@ -1,7 +1,8 @@
 """Tests for the YCE A2A thin wrapper server."""
 import json
+import os
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
@@ -161,8 +162,10 @@ class TestPollLoop:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return add_result
-            return status_result
+                return add_result  # queue_runner add
+            if call_count == 2:
+                return None  # _ensure_runner_started
+            return status_result  # queue_runner status
 
         with patch("a2a_server.asyncio.to_thread", side_effect=mock_to_thread):
             with patch("a2a_server.asyncio.sleep", new_callable=AsyncMock):
@@ -214,8 +217,10 @@ class TestPollLoop:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return add_result
-            return status_result
+                return add_result  # queue_runner add
+            if call_count == 2:
+                return None  # _ensure_runner_started
+            return status_result  # queue_runner status
 
         with patch("a2a_server.asyncio.to_thread", side_effect=mock_to_thread):
             with patch("a2a_server.asyncio.sleep", new_callable=AsyncMock):
@@ -228,6 +233,50 @@ class TestPollLoop:
         final_event = mock_event_queue.enqueue_event.call_args_list[-1][0][0]
         assert final_event.final is True
         assert final_event.status.state.value == "failed"
+
+
+class TestEnsureRunnerStarted:
+    def test_no_pid_file_starts_runner(self, executor):
+        """No PID file should start queue_runner."""
+        with patch("a2a_server.RUNNER_PID_FILE") as mock_pid_file:
+            mock_pid_file.exists.return_value = False
+            with patch("a2a_server.subprocess.Popen") as mock_popen:
+                mock_popen.return_value.pid = 12345
+                with patch("builtins.open", mock_open()):
+                    executor._ensure_runner_started()
+                mock_popen.assert_called_once()
+
+    def test_live_pid_skips_start(self, executor):
+        """Existing PID file with a live process should skip starting."""
+        with patch("a2a_server.RUNNER_PID_FILE") as mock_pid_file:
+            mock_pid_file.exists.return_value = True
+            mock_pid_file.read_text.return_value = "9999"
+            with patch("a2a_server.os.kill") as mock_kill:
+                mock_kill.return_value = None  # Process is alive
+                with patch("a2a_server.subprocess.Popen") as mock_popen:
+                    executor._ensure_runner_started()
+                    mock_popen.assert_not_called()
+
+    def test_stale_pid_starts_runner(self, executor):
+        """Stale PID file (dead process) should start a new runner."""
+        with patch("a2a_server.RUNNER_PID_FILE") as mock_pid_file:
+            mock_pid_file.exists.return_value = True
+            mock_pid_file.read_text.return_value = "9999"
+            with patch("a2a_server.os.kill", side_effect=ProcessLookupError):
+                with patch("a2a_server.subprocess.Popen") as mock_popen:
+                    mock_popen.return_value.pid = 12345
+                    with patch("builtins.open", mock_open()):
+                        executor._ensure_runner_started()
+                    mock_popen.assert_called_once()
+
+    def test_start_failure_does_not_crash(self, executor):
+        """Popen failure should log but not raise."""
+        with patch("a2a_server.RUNNER_PID_FILE") as mock_pid_file:
+            mock_pid_file.exists.return_value = False
+            with patch("builtins.open", mock_open()):
+                with patch("a2a_server.subprocess.Popen", side_effect=OSError("no such file")):
+                    # Should not raise
+                    executor._ensure_runner_started()
 
 
 class TestCancel:
